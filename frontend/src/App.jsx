@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import AdminRoute from './routes/AdminRoute.jsx';
+import Navbar from './components/Navbar.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Home from './pages/Home.jsx';
@@ -16,6 +17,16 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import AdminUsers from './pages/admin/AdminUsers.jsx';
 import AdminRides from './pages/admin/AdminRides.jsx';
 
+// Shell for every signed-in page: the Navbar on top, the page below.
+function SignedInLayout() {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Navbar />
+      <Outlet />
+    </div>
+  );
+}
+
 export default function App() {
   // basename makes client-side routes resolve under the proxy subpath in dev
   // (import.meta.env.BASE_URL === "/5175/") and at root in production ("/").
@@ -28,93 +39,45 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route
-            path="/"
             element={
               <ProtectedRoute>
-                <Home />
+                <SignedInLayout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/publish"
-            element={
-              <ProtectedRoute>
-                <PublishRide />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rides"
-            element={
-              <ProtectedRoute>
-                <MyRides />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/search"
-            element={
-              <ProtectedRoute>
-                <SearchRides />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rides/:id"
-            element={
-              <ProtectedRoute>
-                <RideDetails />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rides/:id/requests"
-            element={
-              <ProtectedRoute>
-                <RideRequests />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/bookings"
-            element={
-              <ProtectedRoute>
-                <MyBookings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminDashboard />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <AdminRoute>
-                <AdminUsers />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/rides"
-            element={
-              <AdminRoute>
-                <AdminRides />
-              </AdminRoute>
-            }
-          />
+          >
+            <Route path="/" element={<Home />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/publish" element={<PublishRide />} />
+            <Route path="/rides" element={<MyRides />} />
+            <Route path="/search" element={<SearchRides />} />
+            <Route path="/rides/:id" element={<RideDetails />} />
+            <Route path="/rides/:id/requests" element={<RideRequests />} />
+            <Route path="/bookings" element={<MyBookings />} />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminDashboard />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <AdminRoute>
+                  <AdminUsers />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/rides"
+              element={
+                <AdminRoute>
+                  <AdminRides />
+                </AdminRoute>
+              }
+            />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -27,66 +27,64 @@ export default function RideRequests() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <span className="text-lg font-semibold text-slate-800">Ride requests</span>
+    <main className="mx-auto max-w-2xl space-y-3 p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-slate-800">Ride requests</h1>
         <Link to="/rides" className="text-sm font-medium text-slate-600 hover:underline">
           Back to my rides
         </Link>
-      </header>
+      </div>
 
-      <main className="mx-auto max-w-2xl space-y-3 p-6">
-        {ride && (
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-            <p className="font-medium text-slate-800">
-              {ride.origin} → {ride.destination}
-            </p>
-            <p className="text-sm text-slate-500">
-              {new Date(ride.departureAt).toLocaleString()} · {ride.availableSeats}/{ride.totalSeats} seats open
-            </p>
-          </div>
-        )}
+      {ride && (
+        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <p className="font-medium text-slate-800">
+            {ride.origin} → {ride.destination}
+          </p>
+          <p className="text-sm text-slate-500">
+            {new Date(ride.departureAt).toLocaleString()} · {ride.availableSeats}/{ride.totalSeats} seats open
+          </p>
+        </div>
+      )}
 
-        {notice && <p className="text-sm text-green-600">{notice}</p>}
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        {requests === null && !error && <p className="text-sm text-slate-500">Loading…</p>}
-        {requests && requests.length === 0 && (
-          <p className="text-sm text-slate-500">No requests yet.</p>
-        )}
+      {notice && <p className="text-sm text-green-600">{notice}</p>}
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      {requests === null && !error && <p className="text-sm text-slate-500">Loading…</p>}
+      {requests && requests.length === 0 && (
+        <p className="text-sm text-slate-500">No requests yet.</p>
+      )}
 
-        {requests?.map((b) => (
-          <div key={b.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-medium text-slate-800">{b.passenger?.name}</p>
-                <p className="text-sm text-slate-500">
-                  {b.seatsBooked} seat{b.seatsBooked === 1 ? '' : 's'} requested
-                </p>
-              </div>
-              <BookingBadge status={b.status} />
+      {requests?.map((b) => (
+        <div key={b.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-slate-800">{b.passenger?.name}</p>
+              <p className="text-sm text-slate-500">
+                {b.seatsBooked} seat{b.seatsBooked === 1 ? '' : 's'} requested
+              </p>
             </div>
-
-            {b.status === 'PENDING' && (
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => act(b.id, 'accept')}
-                  disabled={busyId === b.id}
-                  className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => act(b.id, 'reject')}
-                  disabled={busyId === b.id}
-                  className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                >
-                  Reject
-                </button>
-              </div>
-            )}
+            <BookingBadge status={b.status} />
           </div>
-        ))}
-      </main>
-    </div>
+
+          {b.status === 'PENDING' && (
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => act(b.id, 'accept')}
+                disabled={busyId === b.id}
+                className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
+              >
+                Accept
+              </button>
+              <button
+                onClick={() => act(b.id, 'reject')}
+                disabled={busyId === b.id}
+                className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </main>
   );
 }
