@@ -1,38 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getRideBookings, acceptBooking, rejectBooking } from '../api/bookings.api.js';
-import { getRide } from '../api/rides.api.js';
+import { useRideRequests } from '../hooks/useBookings.js';
 import BookingBadge from '../components/BookingBadge.jsx';
 
 export default function RideRequests() {
   const { id } = useParams();
-  const [ride, setRide] = useState(null);
-  const [requests, setRequests] = useState(null);
-  const [error, setError] = useState(null);
+  const { ride, requests, error: loadError, accept, reject } = useRideRequests(id);
+  const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const load = () => {
-    Promise.all([getRide(id), getRideBookings(id)])
-      .then(([r, b]) => {
-        setRide(r.ride);
-        setRequests(b.bookings);
-      })
-      .catch((err) => setError(err.message));
-  };
-
-  useEffect(load, [id]);
+  const error = actionError || loadError;
 
   const act = async (bookingId, action) => {
     setBusyId(bookingId);
-    setError(null);
+    setActionError(null);
     setNotice(null);
     try {
-      await (action === 'accept' ? acceptBooking(bookingId) : rejectBooking(bookingId));
+      await (action === 'accept' ? accept(bookingId) : reject(bookingId));
       setNotice(action === 'accept' ? 'Request accepted — seats confirmed.' : 'Request rejected.');
-      load();
     } catch (err) {
-      setError(err.message);
+      setActionError(err.message);
     } finally {
       setBusyId(null);
     }

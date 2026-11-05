@@ -1,37 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMyRides, cancelRide } from '../api/rides.api.js';
+import { useMyRides } from '../hooks/useRides.js';
 import RideCard from '../components/RideCard.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 export default function MyRides() {
-  const [rides, setRides] = useState(null);
-  const [error, setError] = useState(null);
+  const { rides, error: loadError, cancel } = useMyRides();
+  const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => {
-    getMyRides()
-      .then(({ rides }) => setRides(rides))
-      .catch((err) => setError(err.message));
-  };
-
-  useEffect(load, []);
+  const error = actionError || loadError;
 
   const onConfirmCancel = async () => {
     setBusy(true);
-    setError(null);
+    setActionError(null);
     setNotice(null);
     try {
-      await cancelRide(confirmId);
+      await cancel(confirmId);
       setNotice('Ride cancelled. Any outstanding bookings were cancelled too.');
-      setConfirmId(null);
-      load();
     } catch (err) {
-      setError(err.message);
-      setConfirmId(null);
+      setActionError(err.message);
     } finally {
+      setConfirmId(null);
       setBusy(false);
     }
   };

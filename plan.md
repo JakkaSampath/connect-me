@@ -109,8 +109,8 @@ frontend/
 │   │   └── AuthContext.jsx      # token + current user state
 │   ├── hooks/
 │   │   ├── useAuth.js
-│   │   ├── useRides.js          # NOT YET BUILT (see §12 Known gaps)
-│   │   └── useBookings.js       # NOT YET BUILT
+│   │   ├── useRides.js          # my rides + cancel, ride details, search
+│   │   └── useBookings.js       # my bookings + cancel, ride requests + accept/reject, seat request
 │   ├── components/              # reusable UI
 │   │   ├── RideCard.jsx
 │   │   ├── BookingBadge.jsx
@@ -462,7 +462,6 @@ Each phase is small, independently verifiable, and ends in a working increment.
 > **Status:** all core features of Phases 0–10 (auth, profile, rides, search, bookings, cancellation, dashboards, admin) are implemented, and the backend is tested. Some planned items were **not built**:
 >
 > **Known gaps**
-> - **Hooks:** only `useAuth` exists; `useRides` and `useBookings` were not built, so pages load data directly (CLAUDE.md §5 asks for data logic in hooks).
 > - **Components:** `Navbar` and `SeatSelector` were not built; pages use their own headers and a plain seat input.
 > - **Frontend tests (§13):** none; there is no frontend test setup.
 > - **CI (§13):** none; tests are not run automatically on push.
