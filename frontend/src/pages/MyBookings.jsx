@@ -33,15 +33,9 @@ export default function MyBookings() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <span className="text-lg font-semibold text-slate-800">My bookings</span>
-        <Link to="/" className="text-sm font-medium text-slate-600 hover:underline">
-          Back
-        </Link>
-      </header>
-
+    <>
       <main className="mx-auto max-w-2xl space-y-3 p-6">
+        <h1 className="text-2xl font-semibold text-slate-800">My bookings</h1>
         {notice && <p className="text-sm text-green-600">{notice}</p>}
         {error && <p className="text-sm text-red-500">{error}</p>}
         {bookings === null && !error && <p className="text-sm text-slate-500">Loading…</p>}
@@ -97,6 +91,6 @@ export default function MyBookings() {
         onConfirm={onConfirmCancel}
         onCancel={() => setConfirmId(null)}
       />
-    </div>
+    </>
   );
 }

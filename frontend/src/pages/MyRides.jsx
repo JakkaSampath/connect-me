@@ -29,20 +29,9 @@ export default function MyRides() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-        <span className="text-lg font-semibold text-slate-800">My rides</span>
-        <div className="flex items-center gap-3">
-          <Link to="/publish" className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700">
-            Publish
-          </Link>
-          <Link to="/" className="text-sm font-medium text-slate-600 hover:underline">
-            Back
-          </Link>
-        </div>
-      </header>
-
+    <>
       <main className="mx-auto max-w-2xl space-y-3 p-6">
+        <h1 className="text-2xl font-semibold text-slate-800">My rides</h1>
         {notice && <p className="text-sm text-green-600">{notice}</p>}
         {error && <p className="text-sm text-red-500">{error}</p>}
         {rides === null && !error && <p className="text-sm text-slate-500">Loading…</p>}
@@ -91,6 +80,6 @@ export default function MyRides() {
         onConfirm={onConfirmCancel}
         onCancel={() => setConfirmId(null)}
       />
-    </div>
+    </>
   );
 }

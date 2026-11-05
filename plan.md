@@ -114,8 +114,8 @@ frontend/
 │   ├── components/              # reusable UI
 │   │   ├── RideCard.jsx
 │   │   ├── BookingBadge.jsx
-│   │   ├── SeatSelector.jsx     # NOT YET BUILT
-│   │   ├── Navbar.jsx           # NOT YET BUILT
+│   │   ├── SeatSelector.jsx     # seat-count picker for booking requests
+│   │   ├── Navbar.jsx           # app-wide navigation on every signed-in page
 │   │   └── FormField.jsx
 │   ├── pages/
 │   │   ├── Register.jsx
@@ -462,7 +462,6 @@ Each phase is small, independently verifiable, and ends in a working increment.
 > **Status:** all core features of Phases 0–10 (auth, profile, rides, search, bookings, cancellation, dashboards, admin) are implemented, and the backend is tested. Some planned items were **not built**:
 >
 > **Known gaps**
-> - **Components:** `Navbar` and `SeatSelector` were not built; pages use their own headers and a plain seat input.
 > - **Frontend tests (§13):** none; there is no frontend test setup.
 > - **CI (§13):** none; tests are not run automatically on push.
 
