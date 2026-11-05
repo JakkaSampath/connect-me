@@ -19,6 +19,12 @@ export default defineConfig(({ command }) => ({
   // dev (serve) runs under the code-server absproxy subpath; build uses root.
   base: command === 'serve' ? DEV_BASE : '/',
   plugins: [react()],
+  // Vitest (npm test): components render in a simulated browser (jsdom). Test
+  // files live in test/, mirroring backend/test/.
+  test: {
+    environment: 'jsdom',
+    include: ['test/**/*.test.{js,jsx}'],
+  },
   server: {
     port: DEV_PORT,
     strictPort: true,
