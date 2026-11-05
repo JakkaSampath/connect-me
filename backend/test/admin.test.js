@@ -109,10 +109,39 @@ describe('Admin dashboard statistics', () => {
     // Invariants that hold regardless of other data in the shared test DB.
     expect(stats.users.total).toBe(stats.users.active + stats.users.deactivated);
     expect(Object.keys(stats.rides.byStatus).sort()).toEqual(['ACTIVE', 'CANCELLED', 'COMPLETED', 'SUSPENDED']);
-    expect(Object.keys(stats.bookings.byStatus).sort()).toEqual(['ACCEPTED', 'CANCELLED', 'PENDING', 'REJECTED']);
+    expect(Object.keys(stats.bookings.byStatus).sort()).toEqual(['ACCEPTED', 'CANCELLED', 'COMPLETED', 'EXPIRED', 'PENDING', 'REJECTED']);
     const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
     expect(stats.rides.total).toBe(sum(stats.rides.byStatus));
     expect(stats.bookings.total).toBe(sum(stats.bookings.byStatus));
+  });
+
+  it('counts a departed ride as COMPLETED and its bookings as COMPLETED / EXPIRED', async () => {
+    const admin = await makeAdmin('derivedadmin');
+    const driver = await makeUser('derivedriver');
+    const acceptedP = await makeUser('derivedacc');
+    const pendingP = await makeUser('derivedpend');
+    const getStats = async () =>
+      (await app.inject({ method: 'GET', url: '/api/admin/stats', headers: { authorization: `Bearer ${admin.token}` } })).json().stats;
+
+    const ride = (await publish(driver.token)).json().ride;
+    const book = (token) =>
+      app.inject({ method: 'POST', url: '/api/bookings', headers: { authorization: `Bearer ${token}` }, payload: { rideId: ride.id, seatsBooked: 1 } });
+    const acceptedId = (await book(acceptedP.token)).json().booking.id;
+    await book(pendingP.token);
+    await app.inject({ method: 'PATCH', url: `/api/bookings/${acceptedId}/accept`, headers: { authorization: `Bearer ${driver.token}` } });
+
+    const before = await getStats();
+    await app.prisma.ride.update({ where: { id: ride.id }, data: { departureAt: new Date(Date.now() - 3600000) } });
+    const after = await getStats();
+
+    expect(after.rides.byStatus.ACTIVE).toBe(before.rides.byStatus.ACTIVE - 1);
+    expect(after.rides.byStatus.COMPLETED).toBe(before.rides.byStatus.COMPLETED + 1);
+    expect(after.bookings.byStatus.ACCEPTED).toBe(before.bookings.byStatus.ACCEPTED - 1);
+    expect(after.bookings.byStatus.COMPLETED).toBe(before.bookings.byStatus.COMPLETED + 1);
+    expect(after.bookings.byStatus.PENDING).toBe(before.bookings.byStatus.PENDING - 1);
+    expect(after.bookings.byStatus.EXPIRED).toBe(before.bookings.byStatus.EXPIRED + 1);
+    expect(after.rides.total).toBe(before.rides.total);
+    expect(after.bookings.total).toBe(before.bookings.total);
   });
 
   it('reflects a deactivation in the deactivated count', async () => {
@@ -231,6 +260,28 @@ describe('Admin ride deactivation', () => {
     expect(react.statusCode).toBe(200);
     expect(react.json().ride.status).toBe('ACTIVE');
     expect((await search()).json().rides).toHaveLength(1);
+  });
+
+  it('cannot reactivate or suspend a ride after it has departed (409 RIDE_DEPARTED)', async () => {
+    const admin = await makeAdmin('departadmin');
+    const driver = await makeUser('departdriver');
+    const auth = { authorization: `Bearer ${admin.token}` };
+    const pastDeparture = { departureAt: new Date(Date.now() - 3600000) };
+
+    // Suspended before departure, then the departure time passes.
+    const suspended = (await publish(driver.token)).json().ride;
+    await app.inject({ method: 'PATCH', url: `/api/admin/rides/${suspended.id}/deactivate`, headers: auth });
+    await app.prisma.ride.update({ where: { id: suspended.id }, data: pastDeparture });
+    const react = await app.inject({ method: 'PATCH', url: `/api/admin/rides/${suspended.id}/activate`, headers: auth });
+    expect(react.statusCode).toBe(409);
+    expect(react.json().error.code).toBe('RIDE_DEPARTED');
+
+    // An active ride that has departed can't be suspended either.
+    const departed = (await publish(driver.token)).json().ride;
+    await app.prisma.ride.update({ where: { id: departed.id }, data: pastDeparture });
+    const susp = await app.inject({ method: 'PATCH', url: `/api/admin/rides/${departed.id}/deactivate`, headers: auth });
+    expect(susp.statusCode).toBe(409);
+    expect(susp.json().error.code).toBe('RIDE_DEPARTED');
   });
 
   it('cannot suspend a non-active ride (409)', async () => {

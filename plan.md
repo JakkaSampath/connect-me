@@ -360,8 +360,8 @@ Base path: `/api`. All mutating and user-scoped endpoints require `Authorization
 | PATCH| `/users/:id/activate` | ✓ (admin) | Reactivate a user (`isActive = true`) |
 | GET  | `/rides` | ✓ (admin) | List all rides, any status (paginated) |
 | GET  | `/rides/:id` | ✓ (admin) | View a single ride |
-| PATCH| `/rides/:id/deactivate` | ✓ (admin) | Deactivate a ride (`status = SUSPENDED`) |
-| PATCH| `/rides/:id/activate` | ✓ (admin) | Reactivate a ride (`status = ACTIVE`) |
+| PATCH| `/rides/:id/deactivate` | ✓ (admin) | Deactivate a ride (`status = SUSPENDED`); only before departure |
+| PATCH| `/rides/:id/activate` | ✓ (admin) | Reactivate a ride (`status = ACTIVE`); only before departure |
 
 Admin authentication reuses `POST /api/auth/login`; the issued JWT carries the user's `role`, and admin routes are guarded by an `authorizeAdmin` preHandler (`403` for non-admins, `401` for unauthenticated). Admins are not self-promotable through the API.
 
@@ -403,9 +403,13 @@ Admin authentication reuses `POST /api/auth/login`; the issued JWT carries the u
 3. **Accept (transaction):** lock ride row → re-check `availableSeats >= seatsBooked` → booking → `ACCEPTED` → decrement `availableSeats`. If seats insufficient, reject with `409`.
 4. **Reject:** booking → `REJECTED`. No seat change.
 5. **Passenger cancel:** allowed while `now < departureAt`. If booking was `ACCEPTED`, increment `availableSeats` back; set `CANCELLED`.
-6. **Driver cancels ride:** ride → `CANCELLED`; cascade all `PENDING`/`ACCEPTED` bookings → `CANCELLED` (one transaction).
+6. **Driver cancels ride:** allowed while `now < departureAt`. Ride → `CANCELLED`; cascade all `PENDING`/`ACCEPTED` bookings → `CANCELLED` (one transaction).
 
 **Status lifecycle:** `PENDING → ACCEPTED → (CANCELLED | COMPLETED)` or `PENDING → REJECTED`.
+
+**Ride status:** an `ACTIVE` ride whose `departureAt` has passed is reported as `COMPLETED` by the API. This is derived on read (`lib/rideStatus.js`), never stored, so no scheduled job is needed. Departed rides cannot be edited, cancelled, suspended or reactivated (`409 RIDE_DEPARTED`). `CANCELLED` and `SUSPENDED` rides keep their status after departure.
+
+**Booking status after departure:** once a ride is `COMPLETED`, its `ACCEPTED` bookings are reported as `COMPLETED` and its `PENDING` bookings as `EXPIRED` (never answered). Also derived on read, never stored. Bookings on `CANCELLED`/`SUSPENDED` rides keep their stored status. Admin stats count these derived statuses.
 
 ---
 

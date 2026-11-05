@@ -2,6 +2,7 @@
 // Seat-affecting writes (edit totalSeats, cancel) run inside a transaction with a
 // row lock on the ride, consistent with the booking-concurrency model (CLAUDE.md §7).
 import { BadRequest, Forbidden, NotFound, Conflict } from '../../lib/errors.js';
+import { effectiveRideStatus, hasDeparted } from '../../lib/rideStatus.js';
 
 const driverSelect = { id: true, name: true, avatarUrl: true };
 
@@ -10,6 +11,7 @@ export function toPublicRide(ride) {
   const { driver, ...rest } = ride;
   return {
     ...rest,
+    status: effectiveRideStatus(ride),
     pricePerSeat: Number(ride.pricePerSeat),
     ...(driver ? { driver } : {}),
   };
@@ -106,6 +108,7 @@ export async function updateRide(prisma, driverId, id, body) {
     if (!ride) throw NotFound('Ride not found', 'RIDE_NOT_FOUND');
     if (ride.driverId !== driverId) throw Forbidden('You do not own this ride', 'NOT_RIDE_OWNER');
     if (ride.status !== 'ACTIVE') throw Conflict('Only active rides can be edited', 'RIDE_NOT_EDITABLE');
+    if (hasDeparted(ride)) throw Conflict('Ride has already departed', 'RIDE_DEPARTED');
 
     const data = {};
     if (body.origin !== undefined) data.origin = body.origin;
@@ -138,6 +141,9 @@ export async function cancelRide(prisma, driverId, id) {
     if (!ride) throw NotFound('Ride not found', 'RIDE_NOT_FOUND');
     if (ride.driverId !== driverId) throw Forbidden('You do not own this ride', 'NOT_RIDE_OWNER');
     if (ride.status !== 'ACTIVE') throw Conflict('Ride is not active', 'RIDE_NOT_ACTIVE');
+    // A departed ride already happened; cancelling it would rewrite its history
+    // and mark its accepted bookings CANCELLED after the fact.
+    if (hasDeparted(ride)) throw Conflict('Ride has already departed', 'RIDE_DEPARTED');
 
     // Cascade: any outstanding requests/bookings are cancelled with the ride.
     await tx.booking.updateMany({
