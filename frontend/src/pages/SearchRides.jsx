@@ -1,34 +1,22 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { searchRides } from '../api/rides.api.js';
+import { useRideSearch } from '../hooks/useRides.js';
 import RideCard from '../components/RideCard.jsx';
 import FormField from '../components/FormField.jsx';
 
 export default function SearchRides() {
   const [criteria, setCriteria] = useState({ origin: '', destination: '', date: '' });
-  const [results, setResults] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const { results, error, loading, search } = useRideSearch();
 
   const update = (field) => (e) => setCriteria({ ...criteria, [field]: e.target.value });
 
-  const onSubmit = async (e) => {
+  const onSubmit = (e) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const { rides } = await searchRides({
-        origin: criteria.origin.trim() || undefined,
-        destination: criteria.destination.trim() || undefined,
-        date: criteria.date || undefined,
-      });
-      setResults(rides);
-    } catch (err) {
-      setError(err.message);
-      setResults(null);
-    } finally {
-      setLoading(false);
-    }
+    search({
+      origin: criteria.origin.trim() || undefined,
+      destination: criteria.destination.trim() || undefined,
+      date: criteria.date || undefined,
+    });
   };
 
   return (

@@ -1,23 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getMyBookings, cancelBooking } from '../api/bookings.api.js';
+import { useMyBookings } from '../hooks/useBookings.js';
 import BookingBadge from '../components/BookingBadge.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 export default function MyBookings() {
-  const [bookings, setBookings] = useState(null);
-  const [error, setError] = useState(null);
+  const { bookings, error: loadError, cancel } = useMyBookings();
+  const [actionError, setActionError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => {
-    getMyBookings()
-      .then(({ bookings }) => setBookings(bookings))
-      .catch((err) => setError(err.message));
-  };
-
-  useEffect(load, []);
+  const error = actionError || loadError;
 
   // Cancellable while still pending/accepted and the ride has not departed.
   const isCancellable = (b) =>
@@ -25,17 +19,15 @@ export default function MyBookings() {
 
   const onConfirmCancel = async () => {
     setBusy(true);
-    setError(null);
+    setActionError(null);
     setNotice(null);
     try {
-      await cancelBooking(confirmId);
+      await cancel(confirmId);
       setNotice('Booking cancelled.');
-      setConfirmId(null);
-      load();
     } catch (err) {
-      setError(err.message);
-      setConfirmId(null);
+      setActionError(err.message);
     } finally {
+      setConfirmId(null);
       setBusy(false);
     }
   };

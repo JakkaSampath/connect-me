@@ -1,32 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getRide } from '../api/rides.api.js';
-import { requestBooking } from '../api/bookings.api.js';
+import { useRide } from '../hooks/useRides.js';
+import { useBookingRequest } from '../hooks/useBookings.js';
 import { useAuth } from '../hooks/useAuth.js';
 
 export default function RideDetails() {
   const { id } = useParams();
   const { user } = useAuth();
-  const [ride, setRide] = useState(null);
-  const [error, setError] = useState(null);
+  const { ride, error } = useRide(id);
+  const request = useBookingRequest();
   const [seats, setSeats] = useState(1);
-  const [request, setRequest] = useState({ state: 'idle', message: null });
 
-  useEffect(() => {
-    getRide(id)
-      .then(({ ride }) => setRide(ride))
-      .catch((err) => setError(err.message));
-  }, [id]);
-
-  const onRequest = async () => {
-    setRequest({ state: 'submitting', message: null });
-    try {
-      await requestBooking({ rideId: id, seatsBooked: Number(seats) });
-      setRequest({ state: 'success', message: 'Request sent! Track it under My bookings.' });
-    } catch (err) {
-      setRequest({ state: 'error', message: err.message });
-    }
-  };
+  const onRequest = () => request.submit({ rideId: id, seatsBooked: Number(seats) });
 
   if (error) {
     return <div className="flex min-h-screen items-center justify-center text-red-500">{error}</div>;
