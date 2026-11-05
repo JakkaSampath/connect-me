@@ -11,7 +11,7 @@ export default async function adminRoutes(fastify) {
     return { stats: await adminService.getStats(fastify.prisma) };
   });
 
-  // Users: list, view, deactivate, reactivate.
+  // Users: list, view, deactivate, reactivate, delete.
   fastify.get('/api/admin/users', { ...adminOnly, schema: paginationQuerySchema }, async (request) => {
     return adminService.listUsers(fastify.prisma, request.query);
   });
@@ -26,6 +26,11 @@ export default async function adminRoutes(fastify) {
 
   fastify.patch('/api/admin/users/:id/activate', { ...adminOnly, schema: adminIdParamsSchema }, async (request) => {
     return { user: await adminService.setUserActive(fastify.prisma, request.user.id, request.params.id, true) };
+  });
+
+  // Delete = anonymize + cancel their upcoming rides and bookings. Final; see the service.
+  fastify.delete('/api/admin/users/:id', { ...adminOnly, schema: adminIdParamsSchema }, async (request) => {
+    return adminService.deleteUser(fastify.prisma, request.user.id, request.params.id);
   });
 
   // Rides: list (any status), view, deactivate (SUSPENDED), reactivate (ACTIVE).

@@ -15,6 +15,10 @@ export function setUserActive(id, active) {
   return apiRequest(`/api/admin/users/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'PATCH' });
 }
 
+export function deleteUser(id) {
+  return apiRequest(`/api/admin/users/${id}`, { method: 'DELETE' });
+}
+
 export function listRides({ limit = 20, offset = 0 } = {}) {
   return apiRequest(`/api/admin/rides?limit=${limit}&offset=${offset}`);
 }

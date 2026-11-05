@@ -14,12 +14,15 @@ function futureISO(days = 1) {
 }
 
 async function cleanup() {
-  const byDomain = { endsWith: `@${TEST_DOMAIN}` };
+  // Deleted test users lose their @phase10.test email, so match their placeholder too.
+  const testUser = {
+    OR: [{ email: { endsWith: `@${TEST_DOMAIN}` } }, { email: { endsWith: '@deleted.invalid' } }],
+  };
   await app.prisma.booking.deleteMany({
-    where: { OR: [{ passenger: { email: byDomain } }, { ride: { driver: { email: byDomain } } }] },
+    where: { OR: [{ passenger: testUser }, { ride: { driver: testUser } }] },
   });
-  await app.prisma.ride.deleteMany({ where: { driver: { email: byDomain } } });
-  await app.prisma.user.deleteMany({ where: { email: byDomain } });
+  await app.prisma.ride.deleteMany({ where: { driver: testUser } });
+  await app.prisma.user.deleteMany({ where: testUser });
 }
 
 async function makeUser(n) {
@@ -107,7 +110,7 @@ describe('Admin dashboard statistics', () => {
     ).json();
 
     // Invariants that hold regardless of other data in the shared test DB.
-    expect(stats.users.total).toBe(stats.users.active + stats.users.deactivated);
+    expect(stats.users.total).toBe(stats.users.active + stats.users.deactivated + stats.users.deleted);
     expect(Object.keys(stats.rides.byStatus).sort()).toEqual(['ACTIVE', 'CANCELLED', 'COMPLETED', 'SUSPENDED']);
     expect(Object.keys(stats.bookings.byStatus).sort()).toEqual(['ACCEPTED', 'CANCELLED', 'COMPLETED', 'EXPIRED', 'PENDING', 'REJECTED']);
     const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
@@ -298,5 +301,125 @@ describe('Admin ride deactivation', () => {
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('RIDE_NOT_ACTIVE');
+  });
+});
+
+describe('Admin user deletion', () => {
+  const auth = (token) => ({ authorization: `Bearer ${token}` });
+  const del = (admin, id) => app.inject({ method: 'DELETE', url: `/api/admin/users/${id}`, headers: auth(admin.token) });
+  const book = (token, rideId) =>
+    app.inject({ method: 'POST', url: '/api/bookings', headers: auth(token), payload: { rideId, seatsBooked: 1 } });
+  const accept = (token, bookingId) =>
+    app.inject({ method: 'PATCH', url: `/api/bookings/${bookingId}/accept`, headers: auth(token) });
+
+  it('cancels their upcoming rides and bookings, keeps history, and anonymizes the account', async () => {
+    const admin = await makeAdmin('deladmin');
+    const victim = await makeUser('delvictim');
+    const otherDriver = await makeUser('delotherdrv');
+    const passenger = await makeUser('delpass');
+
+    // Victim drives an upcoming ride that a passenger has an accepted seat on.
+    const victimRide = (await publish(victim.token)).json().ride;
+    const passengerBooking = (await book(passenger.token, victimRide.id)).json().booking;
+    await accept(victim.token, passengerBooking.id);
+
+    // Victim holds an accepted seat on someone else's upcoming ride.
+    const otherRide = (await publish(otherDriver.token)).json().ride;
+    const victimBooking = (await book(victim.token, otherRide.id)).json().booking;
+    await accept(otherDriver.token, victimBooking.id);
+
+    // Victim drove a past ride with an accepted passenger: history must survive.
+    const pastRide = (await publish(victim.token)).json().ride;
+    const pastBooking = (await book(passenger.token, pastRide.id)).json().booking;
+    await accept(victim.token, pastBooking.id);
+    await app.prisma.ride.update({ where: { id: pastRide.id }, data: { departureAt: new Date(Date.now() - 3600000) } });
+
+    const res = await del(admin, victim.id);
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.cancelledRides).toBe(1);
+    expect(body.cancelledBookings).toBe(2);
+    expect(body.user).toMatchObject({ name: 'Deleted user', phone: null, bio: null, avatarUrl: null, isActive: false });
+    expect(body.user.email).not.toContain(TEST_DOMAIN);
+    expect(body.user.deletedAt).toBeTruthy();
+    expect(body.user.passwordHash).toBeUndefined();
+
+    const ride = (id) => app.prisma.ride.findUnique({ where: { id } });
+    const bookingStatus = async (id) => (await app.prisma.booking.findUnique({ where: { id } })).status;
+
+    // Upcoming ride and the passenger's booking on it are cancelled.
+    expect((await ride(victimRide.id)).status).toBe('CANCELLED');
+    expect(await bookingStatus(passengerBooking.id)).toBe('CANCELLED');
+    // Victim's own booking is cancelled and its seat returned.
+    expect(await bookingStatus(victimBooking.id)).toBe('CANCELLED');
+    expect((await ride(otherRide.id)).availableSeats).toBe(4);
+    // Past ride and its booking are untouched.
+    expect((await ride(pastRide.id)).status).toBe('ACTIVE');
+    expect(await bookingStatus(pastBooking.id)).toBe('ACCEPTED');
+
+    // Their token stops working and the old email can't log in.
+    const me = await app.inject({ method: 'GET', url: '/api/users/me', headers: auth(victim.token) });
+    expect(me.statusCode).toBe(401);
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: email('delvictim'), password: 'secret123' },
+    });
+    expect(login.statusCode).toBe(401);
+  });
+
+  it('a deleted user is final: no reactivate, deactivate or second delete', async () => {
+    const admin = await makeAdmin('finaladmin');
+    const victim = await makeUser('finalvictim');
+    expect((await del(admin, victim.id)).statusCode).toBe(200);
+
+    for (const action of ['activate', 'deactivate']) {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/admin/users/${victim.id}/${action}`,
+        headers: auth(admin.token),
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe('USER_DELETED');
+    }
+    const again = await del(admin, victim.id);
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('USER_DELETED');
+  });
+
+  it('refuses to delete yourself, another admin, or as a non-admin', async () => {
+    const admin = await makeAdmin('guardadmin');
+    const otherAdmin = await makeAdmin('guardadmin2');
+    const normal = await makeUser('guardnormal');
+
+    const self = await del(admin, admin.id);
+    expect(self.statusCode).toBe(403);
+    expect(self.json().error.code).toBe('ADMIN_SELF_DELETION');
+
+    const peer = await del(admin, otherAdmin.id);
+    expect(peer.statusCode).toBe(403);
+    expect(peer.json().error.code).toBe('ADMIN_DELETION_FORBIDDEN');
+
+    const asUser = await del(normal, otherAdmin.id);
+    expect(asUser.statusCode).toBe(403);
+
+    const missing = await del(admin, '00000000-0000-0000-0000-000000000000');
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it('counts deleted users separately on the dashboard', async () => {
+    const admin = await makeAdmin('countdeladmin');
+    const victim = await makeUser('countdelvictim');
+    const stats = async () =>
+      (await app.inject({ method: 'GET', url: '/api/admin/stats', headers: auth(admin.token) })).json().stats.users;
+
+    const before = await stats();
+    await del(admin, victim.id);
+    const after = await stats();
+
+    expect(after.deleted).toBe(before.deleted + 1);
+    expect(after.active).toBe(before.active - 1);
+    expect(after.deactivated).toBe(before.deactivated);
+    expect(after.total).toBe(before.total);
   });
 });

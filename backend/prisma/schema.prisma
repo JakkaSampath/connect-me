@@ -11,17 +11,18 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
   name         String
   phone        String?
   bio          String?
   avatarUrl    String?
-  role         Role     @default(USER) // Phase 10: USER (default) or ADMIN
-  isActive     Boolean  @default(true) // Phase 10: admins can deactivate; false blocks auth
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         Role      @default(USER) // Phase 10: USER (default) or ADMIN
+  isActive     Boolean   @default(true) // Phase 10: admins can deactivate; false blocks auth
+  deletedAt    DateTime? // Set when an admin deletes the account; the account is anonymized and final
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   ridesOffered Ride[]    @relation("DriverRides")
   bookings     Booking[] @relation("PassengerBookings")

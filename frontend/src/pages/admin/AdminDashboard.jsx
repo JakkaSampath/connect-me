@@ -60,10 +60,11 @@ export default function AdminDashboard() {
           <>
             <section>
               <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Users</h2>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Stat label="Total" value={stats.users.total} />
                 <Stat label="Active" value={stats.users.active} />
                 <Stat label="Deactivated" value={stats.users.deactivated} />
+                <Stat label="Deleted" value={stats.users.deleted} />
               </div>
             </section>
 
