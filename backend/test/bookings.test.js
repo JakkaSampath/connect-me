@@ -387,3 +387,73 @@ describe('Bookings on a departed ride (derived COMPLETED / EXPIRED)', () => {
     expect(stored.status).toBe('ACCEPTED');
   });
 });
+
+describe('Concurrent requests on the SAME booking', () => {
+  const ROUNDS = 3;
+  const auth = (token) => ({ authorization: `Bearer ${token}` });
+
+  // Fresh 4-seat ride with one 1-seat PENDING booking (optionally accepted).
+  async function setup(tag, { accepted = false } = {}) {
+    const driver = await makeUser(`${tag}_d`);
+    const passenger = await makeUser(`${tag}_p`);
+    const ride = await publishRide(driver.token);
+    const booking = (await request(passenger.token, ride.id)).json().booking;
+    if (accepted) await app.inject({ method: 'PATCH', url: `/api/bookings/${booking.id}/accept`, headers: auth(driver.token) });
+    return { driver, passenger, rideId: ride.id, bookingId: booking.id };
+  }
+  const accept = (s) => app.inject({ method: 'PATCH', url: `/api/bookings/${s.bookingId}/accept`, headers: auth(s.driver.token) });
+  const reject = (s) => app.inject({ method: 'PATCH', url: `/api/bookings/${s.bookingId}/reject`, headers: auth(s.driver.token) });
+  const cancel = (s) => app.inject({ method: 'PATCH', url: `/api/bookings/${s.bookingId}/cancel`, headers: auth(s.passenger.token) });
+  const seats = async (s) => (await app.prisma.ride.findUnique({ where: { id: s.rideId } })).availableSeats;
+  const status = async (s) => (await app.prisma.booking.findUnique({ where: { id: s.bookingId } })).status;
+  const codes = (responses) => responses.map((r) => r.statusCode).sort();
+
+  it('double accept: one succeeds, one 409, seats taken once', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const s = await setup(`dblacc${i}`);
+      expect(codes(await Promise.all([accept(s), accept(s)]))).toEqual([200, 409]);
+      expect(await status(s)).toBe('ACCEPTED');
+      expect(await seats(s)).toBe(3);
+    }
+  });
+
+  it('accept + cancel at once: booking ends CANCELLED with its seat restored', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const s = await setup(`acccan${i}`);
+      await Promise.all([accept(s), cancel(s)]);
+      expect(await status(s)).toBe('CANCELLED');
+      expect(await seats(s)).toBe(4);
+    }
+  });
+
+  it('same passenger requesting twice at once creates only one active booking', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const driver = await makeUser(`dblreq${i}_d`);
+      const passenger = await makeUser(`dblreq${i}_p`);
+      const ride = await publishRide(driver.token);
+      const results = await Promise.all([request(passenger.token, ride.id), request(passenger.token, ride.id)]);
+      expect(codes(results)).toEqual([201, 409]);
+      const active = await app.prisma.booking.count({ where: { rideId: ride.id, status: { in: ['PENDING', 'ACCEPTED'] } } });
+      expect(active).toBe(1);
+    }
+  });
+
+  it('accept + reject at once: exactly one wins and seats match the outcome', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const s = await setup(`accrej${i}`);
+      expect(codes(await Promise.all([accept(s), reject(s)]))).toEqual([200, 409]);
+      const final = await status(s);
+      expect(['ACCEPTED', 'REJECTED']).toContain(final);
+      expect(await seats(s)).toBe(final === 'ACCEPTED' ? 3 : 4);
+    }
+  });
+
+  it('double cancel of an accepted booking restores the seat once', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      const s = await setup(`dblcan${i}`, { accepted: true });
+      expect(codes(await Promise.all([cancel(s), cancel(s)]))).toEqual([200, 409]);
+      expect(await status(s)).toBe('CANCELLED');
+      expect(await seats(s)).toBe(4);
+    }
+  });
+});
