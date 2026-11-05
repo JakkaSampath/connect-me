@@ -124,6 +124,10 @@ Every secret and environment-specific value comes from env vars. `.env` is gitig
 | `CORS_ORIGIN`    | ❌       | frontend dev origin | Allowed browser origin for the API.                     |
 | `JWT_EXPIRES_IN` | ❌       | `7d`    | Access-token lifetime. Refresh tokens are deferred post-MVP.        |
 
+### Backend tests (`backend/.env.test`)
+
+Same variables as above, read only by `npm test`. `DATABASE_URL` must name a separate database (default `carpool_test`). See `backend/.env.test.example`.
+
 Generate a strong secret:
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
@@ -235,7 +239,16 @@ An admin cannot deactivate their own account (`403 ADMIN_SELF_DEACTIVATION`).
 
 ## Testing
 
-The backend has an integration + concurrency suite (Vitest) that runs against a **real PostgreSQL** test database (it uses `DATABASE_URL`; test data is namespaced by `*.test` email domains and cleaned up).
+The backend has an integration + concurrency suite (Vitest) that runs against an **isolated PostgreSQL test database** (`carpool_test`), never the dev database. Each run resets the test database and applies all migrations first, so results don't depend on leftover data.
+
+**One-time setup** (uses the same Postgres container as dev):
+
+```bash
+cd backend
+cp .env.test.example .env.test   # points DATABASE_URL at carpool_test
+```
+
+`npm test` loads `backend/.env.test` (gitignored) instead of `.env`. It refuses to run if `.env.test` is missing or points at the same database as `.env`. You don't need to create `carpool_test` by hand: the reset creates it.
 
 ```bash
 cd backend
