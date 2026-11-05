@@ -46,7 +46,7 @@ route (JSON-Schema validated) → authenticate → authorize → service → pri
 | Database  | PostgreSQL                                               |
 | Auth      | JWT (Bearer) + bcrypt                                    |
 | Validation| Fastify JSON Schema                                      |
-| Testing   | Vitest (backend integration + concurrency)              |
+| Testing   | Vitest (backend integration + concurrency; frontend components via Testing Library + jsdom) |
 
 ---
 
@@ -155,6 +155,7 @@ See [`backend/.env.example`](./backend/.env.example) and [`frontend/.env.example
 | `npm run dev`           | `frontend/` | Start the Vite dev server (proxies `/api`).    |
 | `npm run build`         | `frontend/` | Production build into `frontend/dist/`.        |
 | `npm run preview`       | `frontend/` | Preview the production build locally.          |
+| `npm test`              | `frontend/` | Run the frontend component tests (no server or DB needed). |
 
 ---
 
@@ -267,7 +268,23 @@ Coverage highlights:
 - **Hardening:** security headers present, departed-ride accept blocked (409), auth and booking rate limiting (429), booking limit counted per user.
 - **Admin (Phase 10):** RBAC (non-admin `403`, unauthenticated `401`); stats shape/consistency; deactivated user can't log in and their existing token is rejected; suspended ride absent from search; self-deactivation blocked.
 
-**Frontend:** production build is verified via `npm run build`; responsive UI is checked manually.
+### Frontend tests
+
+Component tests (Vitest + Testing Library, in a simulated browser via jsdom). They need no server or database: the `api/` layer is mocked where a page loads data.
+
+```bash
+cd frontend
+npm test            # run all frontend tests once
+npx vitest          # watch mode
+```
+
+Coverage highlights:
+- **SeatSelector:** offers only the available seats; reports the choice as a number.
+- **BookingBadge / RideCard:** every status (incl. derived COMPLETED/EXPIRED) and ride details render correctly.
+- **Navbar:** Admin link only for admins; current section highlighted (incl. sub-pages); Log out.
+- **Booking flow (Ride details):** pick seats → request → confirmation; server error shown with retry; no booking on your own, full, or closed rides.
+
+The production build is verified via `npm run build`; responsive layout is checked manually.
 
 ---
 
@@ -294,9 +311,10 @@ Coverage highlights:
 - `tar` ← bcrypt's `@mapbox/node-pre-gyp` — **install/build-time only**, not in the runtime path. Fix requires `bcrypt@6` (breaking).
 - `tinypool` ← Vitest — **dev/test dependency only**, never shipped. Fix requires `vitest@4` (breaking).
 
-**Frontend (4):**
+**Frontend (8):**
 - `esbuild`/`vite` dev-server advisory — **dev server only**, not the production bundle. Fix requires `vite@8` (breaking).
 - `react-router` open-redirect / SSR hydration advisories. Fix requires `react-router-dom@7` (breaking).
+- `vitest`, `tinypool`, `@vitest/mocker`, `vite-node` ← Vitest — **dev/test dependency only**, never shipped; the advisories need the Vitest UI/API server or untrusted test files, which `npm test` doesn't use. Fix requires `vitest@4`, which needs a newer Vite (breaking).
 
 `npm audit fix` without `--force` resolves none of these. Schedule the breaking upgrades as a separate, regression-tested maintenance task.
 
@@ -323,13 +341,14 @@ Coverage highlights:
 │   │       └── <feature>/       #   <feature>.routes.js / .service.js / .schema.js
 │   └── test/                    # Vitest integration + concurrency suite
 ├── frontend/
-│   └── src/
-│       ├── api/                 # HTTP client layer (all requests go through here)
-│       ├── context/             # AuthContext
-│       ├── hooks/               # data hooks
-│       ├── components/          # presentational components
-│       ├── pages/               # route pages (incl. pages/admin/ for Phase 10)
-│       └── routes/              # ProtectedRoute + AdminRoute guards
+│   ├── src/
+│   │   ├── api/                 # HTTP client layer (all requests go through here)
+│   │   ├── context/             # AuthContext
+│   │   ├── hooks/               # data hooks
+│   │   ├── components/          # presentational components
+│   │   ├── pages/               # route pages (incl. pages/admin/ for Phase 10)
+│   │   └── routes/              # ProtectedRoute + AdminRoute guards
+│   └── test/                    # Vitest component tests (Testing Library + jsdom)
 ├── plan.md                      # source-of-truth design
 ├── CLAUDE.md                    # binding development rules
 └── README.md

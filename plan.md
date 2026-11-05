@@ -133,10 +133,11 @@ frontend/
 │   └── routes/
 │       ├── ProtectedRoute.jsx   # guards authenticated pages
 │       └── AdminRoute.jsx       # Phase 10: guards admin-only pages (role = ADMIN)
+├── test/                        # Vitest component tests (Testing Library + jsdom)
 ├── index.html
 ├── tailwind.config.js           # content globs for src
 ├── postcss.config.js            # tailwindcss + autoprefixer
-├── vite.config.js
+├── vite.config.js               # also holds the Vitest config (jsdom)
 ├── .env                         # VITE_API_URL
 └── package.json
 ```
@@ -459,10 +460,9 @@ Each phase is small, independently verifiable, and ends in a working increment.
 - **Objectives:** confidence and handoff.
 - **Deliverables:** test suite (Section 13); README with setup/run instructions; seed/demo data.
 
-> **Status:** all core features of Phases 0–10 (auth, profile, rides, search, bookings, cancellation, dashboards, admin) are implemented, and the backend is tested. Some planned items were **not built**:
+> **Status:** all core features of Phases 0–10 (auth, profile, rides, search, bookings, cancellation, dashboards, admin) are implemented; the backend is tested, and the frontend has component tests for key UI. One planned item was **not built**:
 >
 > **Known gaps**
-> - **Frontend tests (§13):** none; there is no frontend test setup.
 > - **CI (§13):** none; tests are not run automatically on push.
 
 ### Phase 10 — Admin Module (Post-MVP) — ✅ Complete
@@ -475,7 +475,7 @@ Each phase is small, independently verifiable, and ends in a working increment.
   - **Frontend:** `AdminRoute` guard; AdminDashboard (stats), AdminUsers, AdminRides pages; `admin.api.js`.
   - **Tests:** admin API tests — RBAC enforcement (non-admin `403`), stats correctness, deactivation effects (deactivated user cannot log in; suspended ride absent from search). See §13 and §15.
 - **Constraints:** no changes to existing seat-accounting, booking, or ownership logic; all CLAUDE.md rules (validation, auth, transactions, error shape, testing) apply unchanged.
-- **Status:** ✅ Implemented and documented; admin API tested in the backend suite (**86/86** passing as of 2026-11-05, incl. `test/admin.test.js`). The admin UI has no automated tests (see Known gaps). Frontend build clean; additive migration `add_admin_module` applied; README API/demo/security sections updated. No phase 0–9 regressions.
+- **Status:** ✅ Implemented and documented; admin API tested in the backend suite (**86/86** passing as of 2026-11-05, incl. `test/admin.test.js`). The admin pages have no automated UI tests (frontend tests cover shared components and the booking flow). Frontend build clean; additive migration `add_admin_module` applied; README API/demo/security sections updated. No phase 0–9 regressions.
 
 ---
 
@@ -487,8 +487,8 @@ Each phase is small, independently verifiable, and ends in a working increment.
  each endpoint with auth, validation, and error paths against a test database.
 - **E2E (happy paths):** register → publish → search → request → accept → cancel.
 - **Admin API (Phase 10):** role-based access control (non-admin → `403`, unauthenticated → `401` on every admin route); dashboard statistics return correct counts/breakdowns; deactivating a user blocks their login; deactivating a ride (`SUSPENDED`) removes it from search; activate/deactivate are admin-only and idempotent; an admin cannot deactivate their own account.
-- **Frontend:** component tests for key UI (RideCard, booking flow); manual responsive check. *(Component tests not yet built — see §12 Known gaps.)*
-- **Tooling:** a Node test runner (e.g., Vitest/Jest) for backend; isolated test DB; CI run on push. *(Backend runner and isolated test DB done; CI not yet built.)*
+- **Frontend:** component tests for key UI (RideCard, booking flow); manual responsive check. *(Built: `frontend/test/` covers RideCard, BookingBadge, SeatSelector, Navbar and the Ride details booking flow, with the api/ layer mocked.)*
+- **Tooling:** a Node test runner (e.g., Vitest/Jest) for backend; isolated test DB; CI run on push. *(Backend runner, isolated test DB, and frontend Vitest + Testing Library + jsdom done; CI not yet built.)*
 
 ---
 
