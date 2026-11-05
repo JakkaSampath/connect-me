@@ -264,7 +264,7 @@ Coverage highlights:
 - **Search:** origin/destination/date filtering, case-insensitivity, exclusion of full/cancelled/past/own rides.
 - **Bookings:** request rules (duplicate, over-capacity, cancelled ride), accept/reject/cancel, seat decrement/restore.
 - **Concurrency (critical):** two simultaneous accepts on the last seat → exactly one succeeds; `availableSeats` never goes negative.
-- **Hardening:** security headers present, departed-ride accept blocked (409), auth rate limiting (429).
+- **Hardening:** security headers present, departed-ride accept blocked (409), auth and booking rate limiting (429), booking limit counted per user.
 - **Admin (Phase 10):** RBAC (non-admin `403`, unauthenticated `401`); stats shape/consistency; deactivated user can't log in and their existing token is rejected; suspended ride absent from search; self-deactivation blocked.
 
 **Frontend:** production build is verified via `npm run build`; responsive UI is checked manually.
@@ -279,7 +279,7 @@ Coverage highlights:
 - **Role-based access control (Phase 10):** admin-only routes require `role = ADMIN` (`authorizeAdmin` guard); role comes from the JWT/DB, never client input, and no endpoint lets a user self-promote. Deactivated accounts (`isActive = false`) are rejected at login **and** on their next authenticated request.
 - All inputs validated with Fastify JSON Schema; invalid input → `400`.
 - Prisma parameterizes all queries; raw SQL (for row locks) uses parameterized tagged templates only.
-- **Rate limiting** on auth endpoints (register 5/min, login 10/min) plus a global 100/min baseline.
+- **Rate limiting** (`plugins/rateLimit.js`): a global 100/min baseline per IP; stricter limits on auth endpoints (register 5/min, login 10/min, per IP) and booking endpoints (request 10/min; accept/reject/cancel 30/min, counted per logged-in user so users sharing an IP don't throttle each other).
 - **Helmet** security headers; **CORS** restricted to the configured frontend origin.
 - Transactional seat accounting with row locking prevents overselling.
 - Centralized error handler returns a safe, generic message for `500`s (no stack traces or internals leaked).
