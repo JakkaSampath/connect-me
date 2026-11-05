@@ -35,7 +35,7 @@ Ratings/reviews, notifications/email, payments, maps/geocoding. These are deferr
 - **Booking:** request N seats; driver accepts/rejects; passenger views bookings and statuses; passenger cancels before departure.
 - **Seat availability:** decrements only when a booking is **accepted**; restores when an accepted booking is cancelled.
 - **Dashboards:** "My Rides" (as driver) and "My Bookings" (as passenger).
-- **Admin (post-MVP, Phase 10):** admin login with role-based access; dashboard statistics (user/ride/booking counts and status breakdowns); view all users and rides; deactivate/reactivate users and rides for moderation.
+- **Admin (post-MVP, Phase 10):** admin login with role-based access; dashboard statistics (user/ride/booking counts and status breakdowns); view all users and rides; deactivate/reactivate users and rides for moderation; delete (anonymize) users.
 
 ### 2.2 Non-Functional Requirements
 - **Concurrency correctness:** seat counts never oversell under simultaneous accepts (transaction + row lock).
@@ -217,6 +217,7 @@ model User {
   avatarUrl    String?
   role         Role      @default(USER)    // Phase 10: USER (default) or ADMIN
   isActive     Boolean   @default(true)     // Phase 10: admins can deactivate; false blocks auth
+  deletedAt    DateTime?                    // Set when an admin deletes the account (anonymized, final)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -357,7 +358,8 @@ Base path: `/api`. All mutating and user-scoped endpoints require `Authorization
 | GET  | `/users` | ✓ (admin) | List users (paginated; never returns `passwordHash`) |
 | GET  | `/users/:id` | ✓ (admin) | View a single user |
 | PATCH| `/users/:id/deactivate` | ✓ (admin) | Deactivate a user (`isActive = false`) |
-| PATCH| `/users/:id/activate` | ✓ (admin) | Reactivate a user (`isActive = true`) |
+| PATCH| `/users/:id/activate` | ✓ (admin) | Reactivate a user (`isActive = true`); not for deleted users |
+| DELETE| `/users/:id` | ✓ (admin) | Delete a user: anonymize, cancel their upcoming rides/bookings (§15.5); final |
 | GET  | `/rides` | ✓ (admin) | List all rides, any status (paginated) |
 | GET  | `/rides/:id` | ✓ (admin) | View a single ride |
 | PATCH| `/rides/:id/deactivate` | ✓ (admin) | Deactivate a ride (`status = SUSPENDED`); only before departure |
@@ -532,6 +534,7 @@ Counts use efficient aggregate queries (`count` / `groupBy`) and are read-only.
 - **Deactivate user** (`PATCH /api/admin/users/:id/deactivate`): sets `isActive = false`. The user can no longer authenticate (login rejected; existing tokens rejected at `authenticate`). Reversible via `.../activate`.
 - **Deactivate ride** (`PATCH /api/admin/rides/:id/deactivate`): sets `status = SUSPENDED`. Because search filters `status = ACTIVE`, the ride disappears from results immediately. This is distinct from a driver's `CANCELLED` (moderation vs. owner action). Reactivation returns the ride to `ACTIVE`.
 - Deactivation never deletes data or mutates seat counts; booking/seat invariants are untouched.
+- **Delete user** (`DELETE /api/admin/users/:id`): anonymizes instead of removing the row, so other users' history stays intact. In one transaction, with every affected ride locked in id order: the user's upcoming `ACTIVE`/`SUSPENDED` rides are cancelled with all their open bookings; the user's own open bookings on upcoming rides are cancelled and accepted seats restored; the account gets name `Deleted user`, a placeholder email, erased phone/bio/avatar, an unknown random password, `isActive = false` and `deletedAt = now`. Past rides and bookings are kept. Deletion is **final**: deleted users cannot be activated, deactivated or deleted again (`409 USER_DELETED`). Admins cannot delete themselves (`403 ADMIN_SELF_DELETION`) or other admins (`403 ADMIN_DELETION_FORBIDDEN`). Dashboard stats count deleted users separately from deactivated ones.
 
 ### 15.6 Rules & guardrails
 - Admin actions are authorization-gated and input-validated like every other endpoint (JSON Schema; typed errors; `{ error: { code, message } }`).
