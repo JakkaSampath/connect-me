@@ -1,12 +1,12 @@
 // Builds and configures the Fastify instance (no listening here — see server.js).
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 
 import { env, isProduction } from './config/env.js';
 import prismaPlugin from './plugins/prisma.js';
 import authPlugin from './plugins/auth.js';
+import rateLimitPlugin from './plugins/rateLimit.js';
 import errorHandler from './plugins/errorHandler.js';
 import healthRoutes from './modules/health/health.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
@@ -40,10 +40,10 @@ export async function buildApp(options = {}) {
 
   // Rate limiting is enabled by default; tests pass { rateLimit: false } so the
   // suite (many requests to one instance) isn't throttled. The global cap is a
-  // baseline; auth routes set stricter per-route limits (see auth.routes.js).
+  // baseline; auth and booking routes set stricter per-route limits.
   const enableRateLimit = options.rateLimit ?? true;
   if (enableRateLimit) {
-    await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+    await app.register(rateLimitPlugin);
   }
   await app.register(prismaPlugin);
   await app.register(authPlugin);

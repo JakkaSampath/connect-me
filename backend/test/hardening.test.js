@@ -1,6 +1,7 @@
 // Phase 8 hardening tests: security headers, departed-ride accept guard,
-// and auth rate limiting (with the limiter explicitly enabled).
+// and auth + booking rate limiting (with the limiter explicitly enabled).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { buildApp } from '../src/app.js';
 
 const TEST_DOMAIN = 'phase8.test';
@@ -95,5 +96,53 @@ describe('Auth rate limiting (limiter enabled)', () => {
       codes.push(res.statusCode);
     }
     expect(codes).toContain(429); // throttled before all 12 complete
+  });
+});
+
+describe('Booking rate limiting (limiter enabled, per user)', () => {
+  let app;
+  let alice;
+  let bob;
+  beforeAll(async () => {
+    app = await buildApp({ logger: false, rateLimit: true });
+    await app.ready();
+    await cleanup(app);
+    alice = await makeUser(app, 'rl_alice');
+    bob = await makeUser(app, 'rl_bob');
+  });
+  afterAll(async () => {
+    await cleanup(app);
+    await app.close();
+  });
+
+  // A ride id that doesn't exist: each request reaches the limiter (then 404s),
+  // so no rides or seats are needed to exercise the cap.
+  const requestSeat = (token) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/bookings',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { rideId: randomUUID(), seatsBooked: 1 },
+    });
+
+  it('throttles a user after 10 booking requests per minute with 429', async () => {
+    const codes = [];
+    for (let i = 0; i < 11; i++) codes.push((await requestSeat(alice.token)).statusCode);
+    expect(codes.slice(0, 10).every((c) => c === 404)).toBe(true);
+    expect(codes[10]).toBe(429);
+  });
+
+  it('counts per user, so another user on the same IP is not throttled', async () => {
+    const res = await requestSeat(bob.token);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('rejects unauthenticated requests with 401 before the limiter', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/bookings',
+      payload: { rideId: randomUUID(), seatsBooked: 1 },
+    });
+    expect(res.statusCode).toBe(401);
   });
 });

@@ -160,7 +160,7 @@ backend/
 │   ├── plugins/
 │   │   ├── prisma.js            # decorate fastify with db client
 │   │   ├── auth.js              # jwt register + authenticate + authorizeAdmin preHandlers
-│   │   ├── rateLimit.js         # NOT YET BUILT: rate limiting is registered inline in app.js
+│   │   ├── rateLimit.js         # global 100/min baseline; routes set stricter config.rateLimit
 │   │   └── errorHandler.js      # centralized error → HTTP mapping
 │   ├── modules/                 # feature-sliced (routes + service + schema)
 │   │   ├── auth/
@@ -464,7 +464,6 @@ Each phase is small, independently verifiable, and ends in a working increment.
 > **Known gaps**
 > - **Hooks:** only `useAuth` exists; `useRides` and `useBookings` were not built, so pages load data directly (CLAUDE.md §5 asks for data logic in hooks).
 > - **Components:** `Navbar` and `SeatSelector` were not built; pages use their own headers and a plain seat input.
-> - **Rate limiting (Phase 8):** active globally (100/min) with stricter limits on register/login, but registered inline in `app.js` rather than as `plugins/rateLimit.js`, and **booking endpoints have no stricter limit** (CLAUDE.md §11).
 > - **Frontend tests (§13):** none; there is no frontend test setup.
 > - **CI (§13):** none; tests are not run automatically on push.
 
@@ -478,7 +477,7 @@ Each phase is small, independently verifiable, and ends in a working increment.
   - **Frontend:** `AdminRoute` guard; AdminDashboard (stats), AdminUsers, AdminRides pages; `admin.api.js`.
   - **Tests:** admin API tests — RBAC enforcement (non-admin `403`), stats correctness, deactivation effects (deactivated user cannot log in; suspended ride absent from search). See §13 and §15.
 - **Constraints:** no changes to existing seat-accounting, booking, or ownership logic; all CLAUDE.md rules (validation, auth, transactions, error shape, testing) apply unchanged.
-- **Status:** ✅ Implemented and documented; admin API tested in the backend suite (**83/83** passing as of 2026-11-05, incl. `test/admin.test.js`). The admin UI has no automated tests (see Known gaps). Frontend build clean; additive migration `add_admin_module` applied; README API/demo/security sections updated. No phase 0–9 regressions.
+- **Status:** ✅ Implemented and documented; admin API tested in the backend suite (**86/86** passing as of 2026-11-05, incl. `test/admin.test.js`). The admin UI has no automated tests (see Known gaps). Frontend build clean; additive migration `add_admin_module` applied; README API/demo/security sections updated. No phase 0–9 regressions.
 
 ---
 
