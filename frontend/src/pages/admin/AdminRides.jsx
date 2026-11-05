@@ -81,7 +81,7 @@ export default function AdminRides() {
                 Deactivate
               </button>
             )}
-            {ride.status === 'SUSPENDED' && (
+            {ride.status === 'SUSPENDED' && new Date(ride.departureAt) > new Date() && (
               <button
                 onClick={() => toggle(ride.id, true)}
                 disabled={busyId === ride.id}

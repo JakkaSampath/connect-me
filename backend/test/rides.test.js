@@ -203,3 +203,73 @@ describe('DELETE /api/rides/:id', () => {
     expect(res.statusCode).toBe(409);
   });
 });
+
+describe('Departed rides (derived COMPLETED status)', () => {
+  // Publishing rejects past dates, so publish normally and then move the
+  // departure into the past directly in the (isolated) test database.
+  async function departedRide(n) {
+    const { token } = await makeUser(n);
+    const ride = (await publish(token)).json().ride;
+    await app.prisma.ride.update({
+      where: { id: ride.id },
+      data: { departureAt: new Date(Date.now() - 3600000) },
+    });
+    return { token, ride };
+  }
+
+  it('reports a departed ACTIVE ride as COMPLETED without changing the stored status', async () => {
+    const { token, ride } = await departedRide('done1');
+
+    const details = await app.inject({ method: 'GET', url: `/api/rides/${ride.id}` });
+    expect(details.json().ride.status).toBe('COMPLETED');
+
+    const mine = await app.inject({
+      method: 'GET',
+      url: '/api/rides/mine/offered',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(mine.json().rides.find((r) => r.id === ride.id).status).toBe('COMPLETED');
+
+    const stored = await app.prisma.ride.findUnique({ where: { id: ride.id } });
+    expect(stored.status).toBe('ACTIVE');
+  });
+
+  it('cannot edit a departed ride (409 RIDE_DEPARTED)', async () => {
+    const { token, ride } = await departedRide('done2');
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/rides/${ride.id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { pricePerSeat: 5 },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('RIDE_DEPARTED');
+  });
+
+  it('cannot cancel a departed ride, and its history is left unchanged', async () => {
+    const { token, ride } = await departedRide('done3');
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/rides/${ride.id}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('RIDE_DEPARTED');
+
+    const stored = await app.prisma.ride.findUnique({ where: { id: ride.id } });
+    expect(stored.status).toBe('ACTIVE');
+  });
+
+  it('a ride cancelled before departure stays CANCELLED afterwards', async () => {
+    const { token } = await makeUser('done4');
+    const ride = (await publish(token)).json().ride;
+    await app.inject({ method: 'DELETE', url: `/api/rides/${ride.id}`, headers: { authorization: `Bearer ${token}` } });
+    await app.prisma.ride.update({
+      where: { id: ride.id },
+      data: { departureAt: new Date(Date.now() - 3600000) },
+    });
+
+    const details = await app.inject({ method: 'GET', url: `/api/rides/${ride.id}` });
+    expect(details.json().ride.status).toBe('CANCELLED');
+  });
+});

@@ -3,6 +3,7 @@
 // so passwordHash is never returned. Single-row writes need no transaction.
 import { NotFound, Forbidden, Conflict } from '../../lib/errors.js';
 import { toPublicRide } from '../rides/rides.service.js';
+import { hasDeparted } from '../../lib/rideStatus.js';
 
 // Admin user view: includes moderation fields (role, isActive) but never passwordHash.
 const adminUserSelect = {
@@ -22,7 +23,7 @@ const adminUserSelect = {
 const adminRideDriverSelect = { id: true, name: true, email: true };
 
 const RIDE_STATUSES = ['ACTIVE', 'CANCELLED', 'COMPLETED', 'SUSPENDED'];
-const BOOKING_STATUSES = ['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED'];
+const BOOKING_STATUSES = ['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'COMPLETED', 'EXPIRED'];
 
 // Turn a Prisma groupBy result into a { STATUS: count } map with every status
 // present (zero-filled), so the dashboard always renders a stable shape.
@@ -32,18 +33,36 @@ function countsByStatus(groups, allStatuses) {
   return counts;
 }
 
+// Re-label `count` items from one status to another. Used for the derived statuses
+// (COMPLETED/EXPIRED, see lib/rideStatus.js) that are never stored in the database.
+function moveCount(counts, from, to, count) {
+  counts[from] -= count;
+  counts[to] += count;
+}
+
 const sum = (obj) => Object.values(obj).reduce((a, b) => a + b, 0);
 
 export async function getStats(prisma) {
-  const [userTotal, userActive, rideGroups, bookingGroups] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { isActive: true } }),
-    prisma.ride.groupBy({ by: ['status'], _count: { _all: true } }),
-    prisma.booking.groupBy({ by: ['status'], _count: { _all: true } }),
-  ]);
+  // An ACTIVE ride whose departure has passed is COMPLETED (same rule as lib/rideStatus.js).
+  const departedActiveRide = { status: 'ACTIVE', departureAt: { lte: new Date() } };
+
+  const [userTotal, userActive, rideGroups, bookingGroups, ridesCompleted, bookingsCompleted, bookingsExpired] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { isActive: true } }),
+      prisma.ride.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.booking.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.ride.count({ where: departedActiveRide }),
+      prisma.booking.count({ where: { status: 'ACCEPTED', ride: departedActiveRide } }),
+      prisma.booking.count({ where: { status: 'PENDING', ride: departedActiveRide } }),
+    ]);
 
   const ridesByStatus = countsByStatus(rideGroups, RIDE_STATUSES);
+  moveCount(ridesByStatus, 'ACTIVE', 'COMPLETED', ridesCompleted);
+
   const bookingsByStatus = countsByStatus(bookingGroups, BOOKING_STATUSES);
+  moveCount(bookingsByStatus, 'ACCEPTED', 'COMPLETED', bookingsCompleted);
+  moveCount(bookingsByStatus, 'PENDING', 'EXPIRED', bookingsExpired);
 
   return {
     users: { total: userTotal, active: userActive, deactivated: userTotal - userActive },
@@ -108,8 +127,13 @@ export async function getRide(prisma, id) {
 // admin can't accidentally resurrect a ride the driver cancelled. Seat counts and
 // bookings are untouched — SUSPENDED simply drops the ride out of search.
 export async function setRideActive(prisma, id, active) {
-  const ride = await prisma.ride.findUnique({ where: { id }, select: { id: true, status: true } });
+  const ride = await prisma.ride.findUnique({
+    where: { id },
+    select: { id: true, status: true, departureAt: true },
+  });
   if (!ride) throw NotFound('Ride not found', 'RIDE_NOT_FOUND');
+  // A departed ride's outcome is final: it can't be reactivated (or suspended) after the fact.
+  if (hasDeparted(ride)) throw Conflict('Ride has already departed', 'RIDE_DEPARTED');
 
   if (active) {
     if (ride.status !== 'SUSPENDED') {

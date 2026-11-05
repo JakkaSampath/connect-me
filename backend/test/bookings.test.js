@@ -346,3 +346,44 @@ describe('GET /api/rides/mine/offered — pendingCount', () => {
     expect(mine.pendingCount).toBe(2);
   });
 });
+
+describe('Bookings on a departed ride (derived COMPLETED / EXPIRED)', () => {
+  it('accepted → COMPLETED, pending → EXPIRED, cancelled stays CANCELLED', async () => {
+    const driver = await makeUser('dep_driver');
+    const accepted = await makeUser('dep_accepted');
+    const pending = await makeUser('dep_pending');
+    const cancelled = await makeUser('dep_cancelled');
+    const ride = await publishRide(driver.token);
+
+    const acceptedId = (await request(accepted.token, ride.id)).json().booking.id;
+    const pendingId = (await request(pending.token, ride.id)).json().booking.id;
+    const cancelledId = (await request(cancelled.token, ride.id)).json().booking.id;
+    await app.inject({ method: 'PATCH', url: `/api/bookings/${acceptedId}/accept`, headers: { authorization: `Bearer ${driver.token}` } });
+    await app.inject({ method: 'PATCH', url: `/api/bookings/${cancelledId}/cancel`, headers: { authorization: `Bearer ${cancelled.token}` } });
+
+    // Publishing rejects past dates, so move the departure into the past directly.
+    await app.prisma.ride.update({ where: { id: ride.id }, data: { departureAt: new Date(Date.now() - 3600000) } });
+
+    // Passenger view (My Bookings).
+    const mine = (token) =>
+      app.inject({ method: 'GET', url: '/api/bookings/mine', headers: { authorization: `Bearer ${token}` } })
+        .then((res) => res.json().bookings.find((b) => b.rideId === ride.id));
+    expect((await mine(accepted.token)).status).toBe('COMPLETED');
+    expect((await mine(pending.token)).status).toBe('EXPIRED');
+    expect((await mine(cancelled.token)).status).toBe('CANCELLED');
+    expect((await mine(accepted.token)).ride.status).toBe('COMPLETED');
+
+    // Driver view (Ride Requests).
+    const requests = (
+      await app.inject({ method: 'GET', url: `/api/rides/${ride.id}/bookings`, headers: { authorization: `Bearer ${driver.token}` } })
+    ).json().bookings;
+    const statusOf = (id) => requests.find((b) => b.id === id).status;
+    expect(statusOf(acceptedId)).toBe('COMPLETED');
+    expect(statusOf(pendingId)).toBe('EXPIRED');
+    expect(statusOf(cancelledId)).toBe('CANCELLED');
+
+    // Nothing was written: stored statuses are unchanged.
+    const stored = await app.prisma.booking.findUnique({ where: { id: acceptedId } });
+    expect(stored.status).toBe('ACCEPTED');
+  });
+});

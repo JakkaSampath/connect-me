@@ -2,6 +2,7 @@
 // locks the ride row and re-checks availability — this is the last-seat concurrency
 // guard (plan.md §11, CLAUDE.md §7). Requests and rejects never change seat counts.
 import { BadRequest, Forbidden, NotFound, Conflict } from '../../lib/errors.js';
+import { effectiveBookingStatus, effectiveRideStatus } from '../../lib/rideStatus.js';
 
 const rideSummarySelect = {
   id: true,
@@ -18,7 +19,9 @@ const rideSummarySelect = {
 const passengerSelect = { id: true, name: true, avatarUrl: true };
 
 function shapeRide(ride) {
-  return ride ? { ...ride, pricePerSeat: Number(ride.pricePerSeat) } : undefined;
+  return ride
+    ? { ...ride, status: effectiveRideStatus(ride), pricePerSeat: Number(ride.pricePerSeat) }
+    : undefined;
 }
 
 export function toPublicBooking(b) {
@@ -27,7 +30,7 @@ export function toPublicBooking(b) {
     rideId: b.rideId,
     passengerId: b.passengerId,
     seatsBooked: b.seatsBooked,
-    status: b.status,
+    status: effectiveBookingStatus(b, b.ride),
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
   };
@@ -160,5 +163,5 @@ export async function getRideBookings(prisma, driverId, rideId) {
     include: { passenger: { select: passengerSelect } },
     orderBy: { createdAt: 'asc' },
   });
-  return bookings.map(toPublicBooking);
+  return bookings.map((b) => ({ ...toPublicBooking(b), status: effectiveBookingStatus(b, ride) }));
 }
